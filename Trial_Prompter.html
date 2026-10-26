@@ -1,0 +1,646 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>EMG Trial Prompter</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-screen cue stage. Whole stage changes colour per phase so the
+   state reads from the corner of the eye while hands stay on the controller. */
+:root{
+  --bg:#EFF3F4;
+  --surface:#FFFFFF;
+  --line:#D0D9DD;
+  --fg:#16211F;
+  --fg-dim:#5A6C72;
+
+  --rest:#2F5F72;            /* calm state  */
+  --rest-wash:#DDEAEF;
+  --rest-ink:#1C4354;
+
+  --hold:#B2650F;            /* active state */
+  --hold-wash:#F8E7CC;
+  --hold-ink:#7A4409;
+
+  --ready:#4C5B62;
+  --ready-wash:#E2E7E9;
+  --ready-ink:#333F45;
+
+  --font-display:'Barlow Condensed','Helvetica Neue Condensed',Impact,sans-serif;
+  --font-ui:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --font-data:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10161A;
+    --surface:#192126;
+    --line:#2B383E;
+    --fg:#E6EDEF;
+    --fg-dim:#8DA0A8;
+
+    --rest:#76AAC0;
+    --rest-wash:#152830;
+    --rest-ink:#9CCBDE;
+
+    --hold:#E3A449;
+    --hold-wash:#332512;
+    --hold-ink:#F2C078;
+
+    --ready:#8A9BA3;
+    --ready-wash:#1D2429;
+    --ready-ink:#AEBCC2;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10161A;
+  --surface:#192126;
+  --line:#2B383E;
+  --fg:#E6EDEF;
+  --fg-dim:#8DA0A8;
+  --rest:#76AAC0;
+  --rest-wash:#152830;
+  --rest-ink:#9CCBDE;
+  --hold:#E3A449;
+  --hold-wash:#332512;
+  --hold-ink:#F2C078;
+  --ready:#8A9BA3;
+  --ready-wash:#1D2429;
+  --ready-ink:#AEBCC2;
+  color-scheme:dark;
+}
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-ui);line-height:1.5}
+*{box-sizing:border-box}
+
+.app{
+  min-height:100%;
+  display:flex;flex-direction:column;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:14px 20px;
+  gap:14px;
+  max-width:860px;margin:0 auto;width:100%;
+}
+
+/* ---------- top bar ---------- */
+.bar{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{font-family:var(--font-display);font-weight:700;font-size:1.45rem;letter-spacing:.02em;text-transform:uppercase}
+.clock{font-family:var(--font-data);font-size:1.05rem;color:var(--fg-dim);font-variant-numeric:tabular-nums}
+
+/* ---------- setup ---------- */
+.setup{display:flex;flex-direction:column;gap:18px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:16px}
+.panel h2{
+  margin:0 0 12px;font-family:var(--font-ui);font-size:.72rem;font-weight:600;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--fg-dim);
+}
+.actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}
+.act{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line);border-radius:3px;cursor:pointer;min-width:0}
+.act:has(input:checked){border-color:var(--rest);background:var(--rest-wash)}
+.act input{accent-color:var(--rest);width:17px;height:17px;flex:none}
+.act span{font-size:.93rem;min-width:0}
+.nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+.num label{display:block;font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--fg-dim);margin-bottom:5px}
+.num input{
+  width:100%;padding:9px 10px;font-family:var(--font-data);font-size:1rem;
+  border:1px solid var(--line);border-radius:3px;background:var(--bg);color:var(--fg);
+}
+.hint{font-size:.85rem;color:var(--fg-dim);margin:0}
+.hint b{color:var(--fg);font-weight:600}
+
+button{font-family:var(--font-ui);font-size:.95rem;font-weight:600;cursor:pointer;border-radius:3px;border:1px solid transparent;padding:12px 20px}
+button:focus-visible{outline:2px solid var(--rest);outline-offset:2px}
+.primary{background:var(--rest);color:var(--surface);width:100%;font-size:1.05rem;letter-spacing:.03em}
+.primary:disabled{opacity:.45;cursor:not-allowed}
+.ghost{background:transparent;color:var(--fg);border-color:var(--line)}
+
+/* ---------- stage ---------- */
+.stage{flex:1;display:flex;flex-direction:column;gap:14px}
+.card{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;padding:26px 18px;border-radius:5px;text-align:center;
+  border:1px solid var(--line);border-top:7px solid var(--ready);
+  background:var(--ready-wash);
+  transition:background .18s linear,border-color .18s linear;
+  min-height:300px;
+}
+.card.rest{background:var(--rest-wash);border-top-color:var(--rest)}
+.card.hold{background:var(--hold-wash);border-top-color:var(--hold)}
+
+.verb{
+  font-family:var(--font-display);font-weight:700;
+  font-size:clamp(2.6rem,13vw,5.2rem);line-height:.95;letter-spacing:.03em;
+  text-transform:uppercase;color:var(--ready-ink);
+}
+.card.rest .verb{color:var(--rest-ink)}
+.card.hold .verb{color:var(--hold-ink);font-size:clamp(1.9rem,9vw,4.1rem);max-width:14ch;text-wrap:balance;line-height:1}
+
+.cue{
+  font-family:var(--font-display);font-weight:600;
+  font-size:clamp(1.6rem,7vw,2.9rem);line-height:1.05;
+  text-wrap:balance;color:var(--fg);max-width:18ch;
+}
+.cue.muted{color:var(--fg-dim)}
+
+.count{
+  font-family:var(--font-data);font-weight:600;font-variant-numeric:tabular-nums;
+  font-size:clamp(2.4rem,11vw,4rem);line-height:1;margin-top:4px;color:var(--fg);
+}
+
+.phasebar{width:min(100%,460px);height:7px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:6px}
+.phasebar i{display:block;height:100%;width:0;background:var(--ready);border-radius:4px}
+.card.rest .phasebar i{background:var(--rest)}
+.card.hold .phasebar i{background:var(--hold)}
+
+/* ---------- queue ---------- */
+.queue{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:13px 15px;display:flex;flex-direction:column;gap:9px}
+.queue h2{margin:0;font-size:.7rem;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--fg-dim)}
+.qlist{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+.qlist li{display:flex;align-items:center;gap:10px;font-size:.98rem;min-width:0}
+.qlist li .pos{
+  font-family:var(--font-data);font-size:.72rem;color:var(--fg-dim);
+  border:1px solid var(--line);border-radius:2px;padding:1px 6px;flex:none;
+}
+.qlist li.up{font-weight:600}
+.qlist li.up .pos{border-color:var(--rest);color:var(--rest)}
+.qlist li.far{color:var(--fg-dim)}
+.qlist li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+
+.progress{display:flex;flex-direction:column;gap:7px}
+.ptext{display:flex;justify-content:space-between;gap:10px;font-family:var(--font-data);font-size:.82rem;color:var(--fg-dim);font-variant-numeric:tabular-nums}
+.pbar{height:5px;background:var(--line);border-radius:3px;overflow:hidden}
+.pbar i{display:block;height:100%;width:0;background:var(--fg-dim);border-radius:3px}
+
+.row{display:flex;gap:10px}
+.row button{flex:1}
+
+/* ---------- done ---------- */
+.done{display:flex;flex-direction:column;gap:14px}
+.tally{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.tally div{border:1px solid var(--line);border-radius:4px;padding:11px 13px;background:var(--surface)}
+.tally dt{font-size:.68rem;letter-spacing:.11em;text-transform:uppercase;color:var(--fg-dim);margin:0 0 3px}
+.tally dd{margin:0;font-family:var(--font-data);font-size:1.3rem;font-variant-numeric:tabular-nums}
+textarea{
+  width:100%;min-height:190px;font-family:var(--font-data);font-size:.78rem;line-height:1.45;
+  padding:11px;border:1px solid var(--line);border-radius:3px;background:var(--bg);color:var(--fg);resize:vertical;
+}
+.ok{color:var(--rest);font-size:.85rem;font-weight:600}
+
+@media (prefers-reduced-motion: reduce){
+  *{transition:none!important;animation:none!important}
+}
+</style>
+
+<div class="app">
+  <div class="bar">
+    <div class="brand">EMG Trial Prompter</div>
+    <div class="clock" id="clock">--:--</div>
+  </div>
+
+  <!-- ============ SETUP ============ -->
+  <section class="setup" id="setup">
+    <div class="panel">
+      <h2>Actions in this block</h2>
+      <div class="actions" id="actionList"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Timing</h2>
+      <div class="nums">
+        <div class="num">
+          <label for="reps">Reps each</label>
+          <input id="reps" type="number" min="1" max="50" value="5">
+        </div>
+        <div class="num">
+          <label for="hold">Hold (s)</label>
+          <input id="hold" type="number" min="1" max="20" step="0.5" value="3">
+        </div>
+        <div class="num">
+          <label for="rest">Rest (s)</label>
+          <input id="rest" type="number" min="1" max="30" step="0.5" value="3">
+        </div>
+        <div class="num">
+          <label for="lead">Lead-in (s)</label>
+          <input id="lead" type="number" min="1" max="60" value="5">
+        </div>
+      </div>
+    </div>
+
+    <p class="hint">
+      Press <b>Begin</b>, then start your recording script during the lead-in countdown.
+      Order is reshuffled every run. At the end you get a timestamped cue log in epoch
+      seconds, which lines up directly with the <b>timestamp</b> column in your EMG CSV.
+    </p>
+
+    <button class="primary" id="begin">Begin · <span id="planLen">30</span> trials, <span id="planDur">5:30</span></button>
+  </section>
+
+  <!-- ============ RUN ============ -->
+  <section class="stage" id="stage" hidden>
+    <div class="card" id="card">
+      <div class="verb" id="verb">Get ready</div>
+      <div class="cue muted" id="cue">Start your recording now</div>
+      <div class="count" id="count">5</div>
+      <div class="phasebar"><i id="phaseFill"></i></div>
+    </div>
+
+    <div class="queue">
+      <h2>Coming up</h2>
+      <ul class="qlist" id="qlist"></ul>
+    </div>
+
+    <div class="progress">
+      <div class="ptext">
+        <span id="trialInfo">Trial 0 / 30</span>
+        <span id="remain">—</span>
+      </div>
+      <div class="pbar"><i id="overallFill"></i></div>
+    </div>
+
+    <div class="row">
+      <button class="ghost" id="pause">Pause</button>
+      <button class="ghost" id="stop">Stop</button>
+    </div>
+  </section>
+
+  <!-- ============ DONE ============ -->
+  <section class="done" id="done" hidden>
+    <div class="panel">
+      <h2>Block complete</h2>
+      <div class="tally">
+        <div><dt>Trials</dt><dd id="dTrials">0</dd></div>
+        <div><dt>Duration</dt><dd id="dDur">0:00</dd></div>
+        <div><dt>Actions</dt><dd id="dActions">0</dd></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Cue log — paste beside your recording</h2>
+      <textarea id="log" readonly spellcheck="false"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="ghost" id="copy">Copy CSV</button>
+        <button class="primary" id="again" style="width:auto">Run another block</button>
+      </div>
+      <p class="hint" id="copied" hidden><span class="ok">Copied.</span></p>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var DEFAULT_ACTIONS = [
+    { id: "paddle_up",   label: "Upper paddle" },
+    { id: "paddle_low",  label: "Lower paddle" },
+    { id: "trigger_r",   label: "Right trigger (RT)" },
+    { id: "bumper_r",    label: "Right bumper (RB)" },
+    { id: "stick_r",     label: "Right stick click" },
+    { id: "face_a",      label: "A button" }
+  ];
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  var el = {
+    setup: $("setup"), stage: $("stage"), done: $("done"),
+    actionList: $("actionList"), reps: $("reps"), hold: $("hold"),
+    rest: $("rest"), lead: $("lead"), begin: $("begin"),
+    planLen: $("planLen"), planDur: $("planDur"),
+    card: $("card"), verb: $("verb"), cue: $("cue"), count: $("count"),
+    phaseFill: $("phaseFill"), qlist: $("qlist"),
+    trialInfo: $("trialInfo"), remain: $("remain"), overallFill: $("overallFill"),
+    pause: $("pause"), stop: $("stop"), clock: $("clock"),
+    dTrials: $("dTrials"), dDur: $("dDur"), dActions: $("dActions"),
+    log: $("log"), copy: $("copy"), again: $("again"), copied: $("copied")
+  };
+
+  // ---------------------------------------------------------------- audio
+  var actx = null;
+  function tone(freq, dur, vol) {
+    if (!actx) return;
+    try {
+      var o = actx.createOscillator(), g = actx.createGain();
+      o.type = "sine";
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, actx.currentTime);
+      g.gain.exponentialRampToValueAtTime(vol, actx.currentTime + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
+      o.connect(g); g.connect(actx.destination);
+      o.start(); o.stop(actx.currentTime + dur + 0.02);
+    } catch (e) { /* audio is a nicety */ }
+  }
+
+  // ---------------------------------------------------------------- setup UI
+  DEFAULT_ACTIONS.forEach(function (a) {
+    var lab = document.createElement("label");
+    lab.className = "act";
+    lab.innerHTML = '<input type="checkbox" id="act_' + a.id + '" checked>' +
+                    '<span>' + a.label + '</span>';
+    el.actionList.appendChild(lab);
+  });
+
+  function chosen() {
+    return DEFAULT_ACTIONS.filter(function (a) {
+      var box = $("act_" + a.id);
+      return box && box.checked;
+    });
+  }
+  function nUm(input, fallback) {
+    var v = parseFloat(input.value);
+    return isFinite(v) && v > 0 ? v : fallback;
+  }
+  function mmss(sec) {
+    sec = Math.max(0, Math.round(sec));
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  function refreshPlan() {
+    var acts = chosen();
+    var n = acts.length * Math.round(nUm(el.reps, 5));
+    var total = nUm(el.lead, 5) + n * (nUm(el.rest, 3) + nUm(el.hold, 3)) + nUm(el.rest, 3);
+    el.planLen.textContent = n;
+    el.planDur.textContent = mmss(total);
+    el.begin.disabled = n === 0;
+  }
+  [el.reps, el.hold, el.rest, el.lead].forEach(function (i) {
+    i.addEventListener("input", refreshPlan);
+  });
+  el.actionList.addEventListener("change", refreshPlan);
+  refreshPlan();
+
+  // ---------------------------------------------------------------- schedule
+  var run = null;
+
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  }
+
+  function buildSchedule() {
+    var acts = chosen();
+    var reps = Math.round(nUm(el.reps, 5));
+    var holdS = nUm(el.hold, 3);
+    var restS = nUm(el.rest, 3);
+    var leadS = nUm(el.lead, 5);
+
+    var pool = [];
+    acts.forEach(function (a) {
+      for (var r = 0; r < reps; r++) pool.push(a);
+    });
+    shuffle(pool);
+
+    var phases = [];
+    var t = 0;
+    phases.push({ kind: "lead", label: "", dur: leadS, t0: 0, t1: leadS, trial: 0 });
+    t = leadS;
+    pool.forEach(function (a, i) {
+      phases.push({ kind: "rest", label: a.label, id: a.id, dur: restS, t0: t, t1: t + restS, trial: i + 1 });
+      t += restS;
+      phases.push({ kind: "hold", label: a.label, id: a.id, dur: holdS, t0: t, t1: t + holdS, trial: i + 1 });
+      t += holdS;
+    });
+    phases.push({ kind: "rest", label: "", dur: restS, t0: t, t1: t + restS, trial: pool.length });
+    t += restS;
+
+    return { phases: phases, pool: pool, total: t, nTrials: pool.length, nActions: acts.length };
+  }
+
+  // ---------------------------------------------------------------- run loop
+  var wakeLock = null;
+
+  function start() {
+    if (!actx) {
+      try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { actx = null; }
+    }
+    var sched = buildSchedule();
+    run = {
+      sched: sched,
+      epoch0: Date.now() / 1000,
+      perf0: performance.now(),
+      pausedAt: null,
+      pausedTotal: 0,
+      idx: -1,
+      lastWhole: -1,
+      stopped: false
+    };
+
+    el.setup.hidden = true;
+    el.done.hidden = true;
+    el.stage.hidden = false;
+    el.pause.textContent = "Pause";
+
+    if (navigator.wakeLock && navigator.wakeLock.request) {
+      navigator.wakeLock.request("screen").then(function (w) { wakeLock = w; })
+        .catch(function () { /* fine */ });
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function elapsed() {
+    var now = run.pausedAt !== null ? run.pausedAt : performance.now();
+    return (now - run.perf0 - run.pausedTotal) / 1000;
+  }
+
+  function phaseAt(t) {
+    var p = run.sched.phases;
+    for (var i = 0; i < p.length; i++) {
+      if (t < p[i].t1) return i;
+    }
+    return -1;
+  }
+
+  function upcoming(fromTrial, howMany) {
+    var out = [];
+    var pool = run.sched.pool;
+    for (var i = fromTrial; i < pool.length && out.length < howMany; i++) {
+      out.push({ n: i + 1, label: pool[i].label });
+    }
+    return out;
+  }
+
+  function paintQueue(curTrial, inHold) {
+    // during a hold the current trial is showing, so the queue starts after it
+    var from = inHold ? curTrial : curTrial - 1;
+    var items = upcoming(from, 3);
+    var html = "";
+    if (!items.length) {
+      html = '<li class="far"><span>End of block</span></li>';
+    } else {
+      items.forEach(function (it, k) {
+        html += '<li class="' + (k === 0 ? "up" : "far") + '">' +
+                '<i class="pos">' + it.n + '</i><span>' + it.label + '</span></li>';
+      });
+    }
+    el.qlist.innerHTML = html;
+  }
+
+  function tick() {
+    if (!run || run.stopped) return;
+
+    var t = elapsed();
+    var total = run.sched.total;
+
+    if (t >= total) { finish(); return; }
+
+    var i = phaseAt(t);
+    var ph = run.sched.phases[i];
+    var into = t - ph.t0;
+    var left = ph.t1 - t;
+
+    // phase change
+    if (i !== run.idx) {
+      run.idx = i;
+      run.lastWhole = -1;
+
+      el.card.className = "card " + (ph.kind === "hold" ? "hold" : ph.kind === "rest" ? "rest" : "");
+
+      if (ph.kind === "lead") {
+        el.verb.textContent = "Get ready";
+        el.cue.textContent = "Start your recording now";
+        el.cue.className = "cue muted";
+        paintQueue(1, false);
+      } else if (ph.kind === "rest") {
+        el.verb.textContent = "Rest";
+        if (ph.label) {
+          el.cue.textContent = "Next: " + ph.label;
+          el.cue.className = "cue";
+          paintQueue(ph.trial, false);
+        } else {
+          el.cue.textContent = "Block finishing";
+          el.cue.className = "cue muted";
+          el.qlist.innerHTML = '<li class="far"><span>End of block</span></li>';
+        }
+        tone(420, 0.09, 0.14);
+      } else {
+        el.verb.textContent = ph.label;
+        el.cue.textContent = "hold";
+        el.cue.className = "cue muted";
+        paintQueue(ph.trial, true);
+        tone(880, 0.13, 0.2);
+      }
+
+      el.trialInfo.textContent = ph.kind === "lead"
+        ? "Trial 0 / " + run.sched.nTrials
+        : "Trial " + ph.trial + " / " + run.sched.nTrials;
+    }
+
+    // countdown beeps in the final 3s of lead-in
+    var whole = Math.ceil(left);
+    if (whole !== run.lastWhole) {
+      run.lastWhole = whole;
+      if (ph.kind === "lead" && whole <= 3 && whole >= 1) tone(600, 0.07, 0.12);
+    }
+
+    el.count.textContent = whole;
+    el.phaseFill.style.width = Math.min(100, (into / ph.dur) * 100) + "%";
+    el.overallFill.style.width = Math.min(100, (t / total) * 100) + "%";
+    el.remain.textContent = mmss(total - t) + " left";
+    el.clock.textContent = mmss(t);
+
+    requestAnimationFrame(tick);
+  }
+
+  // ---------------------------------------------------------------- controls
+  el.begin.addEventListener("click", start);
+
+  el.pause.addEventListener("click", function () {
+    if (!run) return;
+    if (run.pausedAt === null) {
+      run.pausedAt = performance.now();
+      el.pause.textContent = "Resume";
+    } else {
+      run.pausedTotal += performance.now() - run.pausedAt;
+      run.pausedAt = null;
+      el.pause.textContent = "Pause";
+      requestAnimationFrame(tick);
+    }
+  });
+
+  el.stop.addEventListener("click", function () {
+    if (!run) return;
+    run.stopped = true;
+    releaseLock();
+    el.stage.hidden = true;
+    el.setup.hidden = false;
+    el.clock.textContent = "--:--";
+    run = null;
+  });
+
+  el.again.addEventListener("click", function () {
+    el.done.hidden = true;
+    el.setup.hidden = false;
+    el.clock.textContent = "--:--";
+  });
+
+  function releaseLock() {
+    if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+  }
+
+  document.addEventListener("keydown", function (ev) {
+    if (ev.code === "Space") {
+      if (!el.setup.hidden && !el.begin.disabled) { ev.preventDefault(); start(); }
+      else if (!el.stage.hidden) { ev.preventDefault(); el.pause.click(); }
+    } else if (ev.code === "Escape" && !el.stage.hidden) {
+      el.stop.click();
+    }
+  });
+
+  // ---------------------------------------------------------------- finish
+  function finish() {
+    releaseLock();
+    var s = run.sched, e0 = run.epoch0;
+
+    var lines = ["index,phase,action,t_epoch_start,t_epoch_end,t_rel_start,t_rel_end"];
+    var n = 0;
+    s.phases.forEach(function (p) {
+      if (p.kind === "lead") return;
+      n++;
+      lines.push([
+        n,
+        p.kind,
+        p.label ? '"' + p.label + '"' : '""',
+        (e0 + p.t0).toFixed(3),
+        (e0 + p.t1).toFixed(3),
+        p.t0.toFixed(3),
+        p.t1.toFixed(3)
+      ].join(","));
+    });
+
+    el.log.value = lines.join("\n");
+    el.dTrials.textContent = s.nTrials;
+    el.dDur.textContent = mmss(s.total);
+    el.dActions.textContent = s.nActions;
+
+    el.stage.hidden = true;
+    el.done.hidden = false;
+    el.copied.hidden = true;
+    tone(520, 0.1, 0.16);
+    setTimeout(function () { tone(780, 0.22, 0.16); }, 130);
+    run = null;
+  }
+
+  el.copy.addEventListener("click", function () {
+    var text = el.log.value;
+    function fallback() {
+      el.log.removeAttribute("readonly");
+      el.log.select();
+      el.log.setSelectionRange(0, text.length);
+      el.log.setAttribute("readonly", "readonly");
+      el.copied.hidden = false;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        el.copied.hidden = false;
+      }).catch(fallback);
+    } else {
+      fallback();
+    }
+  });
+})();
+</script>
+
+</body></html>
